@@ -8,15 +8,31 @@ import PaperTradeForm from '../components/features/paper-trade/PaperTradeForm'
 import TerminalTab from '../components/features/paper-trade/TerminalTab'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Loader2, Activity, LayoutDashboard, TrendingUp, TrendingDown, Wallet } from 'lucide-react'
+import { Loader2, Activity, LayoutDashboard, TrendingUp, TrendingDown, Wallet, DollarSign, RefreshCw } from 'lucide-react'
 import { fetchCurrentPrice } from '../lib/tradeUtils'
 
 export default function PaperTradePage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [viewMode, setViewMode] = useState('terminal') // 'terminal' | 'journal'
+  const [viewMode, setViewMode] = useState('terminal')
   const [tab, setTab] = useState('open')
   const [livePrices, setLivePrices] = useState({})
+
+  // Fetch Trades
+  const { data: trades = [], isLoading } = useQuery({
+    queryKey: ['paper_trades', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('paper_trades')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('opened_at', { ascending: false })
+      
+      if (error) throw error
+      return data
+    },
+    enabled: !!user?.id
+  })
 
   // Centralized Live Price Polling
   useEffect(() => {
@@ -52,23 +68,7 @@ export default function PaperTradePage() {
     pollPrices()
     const interval = setInterval(pollPrices, 10000)
     return () => { isMounted = false; clearInterval(interval) }
-  }, [trades, queryClient]) // Depend on trades to re-evaluate symbols when they change
-
-  // Fetch Trades
-  const { data: trades = [], isLoading } = useQuery({
-    queryKey: ['paper_trades', user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('paper_trades')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('opened_at', { ascending: false })
-      
-      if (error) throw error
-      return data
-    },
-    enabled: !!user?.id
-  })
+  }, [trades, queryClient])
 
   // Realtime Subscriptions
   useEffect(() => {
@@ -78,7 +78,7 @@ export default function PaperTradePage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'paper_trades', filter: `user_id=eq.${user.id}` },
-        (payload) => {
+        () => {
           queryClient.invalidateQueries({ queryKey: ['paper_trades', user.id] })
         }
       )
@@ -154,16 +154,8 @@ export default function PaperTradePage() {
 
   const invested = openTrades.reduce((s, t) => s + Number(t.entry_price) * Number(t.quantity), 0)
   const available = VIRTUAL_CAPITAL + totalPnL - invested
-  const accountValue = VIRTUAL_CAPITAL + totalPnL + unrealisedPnL
 
-  // Calculate current win streak
-  let currentStreak = 0
-  for (let i = 0; i < closedTrades.length; i++) {
-    if (Number(closedTrades[i].pnl) > 0) currentStreak++
-    else break
-  }
-
-  // Reset all trades (wipe the session)
+  // Reset Mutation
   const resetMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
@@ -173,45 +165,45 @@ export default function PaperTradePage() {
       if (error) throw error
     },
     onSuccess: () => {
-      toast.success('Paper trading session reset. Starting fresh with ₹10,00,000!')
+      toast.success('Paper trading session reset!')
       queryClient.invalidateQueries({ queryKey: ['paper_trades', user.id] })
     },
     onError: (e) => toast.error(e.message || 'Reset failed')
   })
 
   const handleReset = () => {
-    if (!window.confirm('Reset your entire paper trading session? This will delete ALL open and closed trades. This cannot be undone.')) return
+    if (!window.confirm('Reset your entire paper trading session? This will delete ALL trades.')) return
     resetMutation.mutate()
   }
 
   return (
     <div className={`mx-auto fade-in h-full relative ${viewMode === 'terminal' ? 'p-0 flex flex-col' : 'p-6 max-w-[1100px]'}`}>
       
-      {/* Top Navigation */}
-      <div className={`flex items-center justify-between mb-6 ${viewMode === 'terminal' ? 'px-6 py-4 glass-panel border-x-0 border-t-0 rounded-none z-10 relative' : ''}`}>
+      {/* Top Header */}
+      <div className={`flex items-center justify-between mb-6 ${viewMode === 'terminal' ? 'px-6 py-4 bg-[#111118] border-b border-white/[0.07] z-10 relative' : ''}`}>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
-            <h1 className="font-head text-[24px] font-bold tracking-tight text-text drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">Paper Trade</h1>
-            <span className="badge badge-green hidden sm:inline-flex">
-              <div className="w-1.5 h-1.5 rounded-full bg-green" />
-              Virtual · Zero risk
+            <h1 className="font-head text-[22px] font-semibold text-white tracking-tight">Paper Trading</h1>
+            <span className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-[rgba(52,212,138,0.1)] border border-[rgba(52,212,138,0.3)] text-[#34d48a] flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#34d48a] animate-pulse" />
+              Virtual - Zero Risk
             </span>
           </div>
 
-          <div className="h-5 w-[1px] bg-border mx-2 hidden sm:block"></div>
+          <div className="h-5 w-[1px] bg-white/[0.07] mx-2 hidden sm:block" />
           
-          <div className="flex bg-black/40 backdrop-blur-md p-1.5 rounded-lg border border-white/5 shadow-inner">
+          <div className="flex bg-[#0a0a0f] p-1 rounded-lg border border-white/[0.07]">
             <button 
               onClick={() => setViewMode('terminal')} 
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-300 ${viewMode === 'terminal' ? 'bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.05)]' : 'text-text-muted hover:text-white hover:bg-white/5'}`}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-[12px] font-medium transition-all duration-150 ${viewMode === 'terminal' ? 'bg-[#18181f] text-white' : 'text-text-muted hover:text-white'}`}
             >
-              <Activity size={16} /> F&O Terminal
+              <Activity size={14} /> F&O Terminal
             </button>
             <button 
               onClick={() => setViewMode('journal')} 
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-300 ${viewMode === 'journal' ? 'bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.05)]' : 'text-text-muted hover:text-white hover:bg-white/5'}`}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-[12px] font-medium transition-all duration-150 ${viewMode === 'journal' ? 'bg-[#18181f] text-white' : 'text-text-muted hover:text-white'}`}
             >
-              <LayoutDashboard size={16} /> Dashboard
+              <LayoutDashboard size={14} /> Dashboard
             </button>
           </div>
         </div>
@@ -220,9 +212,9 @@ export default function PaperTradePage() {
           <button
             onClick={handleReset}
             disabled={resetMutation.isPending || trades.length === 0}
-            className="btn btn-sm !border-red/30 !text-red !bg-red-dim hover:opacity-80 disabled:opacity-40"
+            className="px-3 py-1.5 text-[12px] font-medium rounded-md bg-[rgba(247,97,79,0.1)] border border-[rgba(247,97,79,0.3)] text-[#f7614f] hover:bg-[rgba(247,97,79,0.15)] transition-colors flex items-center gap-1.5 disabled:opacity-40"
           >
-            {resetMutation.isPending ? <span className="spinner w-3 h-3" /> : '↺'} Reset session
+            <RefreshCw size={12} className={resetMutation.isPending ? 'animate-spin' : ''} /> Reset session
           </button>
         )}
       </div>
@@ -232,70 +224,78 @@ export default function PaperTradePage() {
           <TerminalTab onTradeAdded={() => queryClient.invalidateQueries({ queryKey: ['paper_trades', user.id] })} />
         </div>
       ) : (
-        <div className="fade-in animate-in slide-in-from-bottom-2">
-          {/* Capital overview */}
-      <div className="grid grid-cols-5 gap-4 mb-8">
-        {[
-          { label: 'ACCOUNT VALUE', value: INR(accountValue), sub: `ROI: ${((accountValue/VIRTUAL_CAPITAL - 1)*100).toFixed(2)}%`, icon: Wallet, color: 'text-white' },
-          { label: 'REALISED P&L', value: INR(totalPnL), sub: totalPnL >= 0 ? 'Profit' : 'Loss', color: totalPnL >= 0 ? 'text-green' : 'text-red', icon: totalPnL >= 0 ? TrendingUp : TrendingDown },
-          { label: 'UNREALISED P&L', value: INR(unrealisedPnL), sub: `${openTrades.length} open positions`, color: unrealisedPnL >= 0 ? 'text-green' : 'text-red', icon: Activity },
-          { label: 'AVAIL. MARGIN', value: INR(Math.max(0, available)), sub: `Usage: ${((invested/VIRTUAL_CAPITAL)*100).toFixed(1)}%`, color: 'text-accent' },
-          { label: 'WIN STREAK', value: `${currentStreak} 🔥`, sub: 'Consecutive winners', color: currentStreak >= 3 ? 'text-amber' : 'text-text' },
-        ].map((m, i) => (
-          <div key={i} className="glass-panel p-5 text-center md:text-left flex flex-col items-center md:items-start group hover:border-white/20 transition-all duration-300">
-            <div className="flex items-center gap-2 mb-2">
-              {m.icon && <m.icon size={12} className="text-text-dim" />}
-              <div className="text-[10px] font-bold tracking-wider text-text-muted">{m.label}</div>
-            </div>
-            <div className={`text-[20px] font-bold font-head tracking-tight ${m.color || 'text-white'} drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]`}>{m.value}</div>
-            <div className="text-[11px] text-text-dim mt-1.5">{m.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-[360px_1fr] gap-5">
-        {/* Order form */}
-        <PaperTradeForm 
-          onSubmit={(data) => placeOrderMutation.mutate(data)} 
-          isSubmitting={placeOrderMutation.isPending} 
-        />
-
-        {/* Trades panel */}
-        <div>
-          <div className="flex gap-2 mb-4">
-            {['open', 'closed'].map(t => (
-              <button key={t} onClick={() => setTab(t)} 
-                className={`btn btn-sm capitalize ${tab === t ? 'bg-accent-dim border-accent-border text-accent' : 'bg-transparent border-border text-text-muted'}`}>
-                {t} ({t === 'open' ? openTrades.length : closedTrades.length})
-              </button>
+        <div className="fade-in">
+          {/* Capital Metrics */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            {[
+              { label: 'Virtual Capital', value: INR(VIRTUAL_CAPITAL), icon: Wallet, color: 'white' },
+              { label: 'In Positions', value: INR(invested), icon: Activity, color: 'white' },
+              { label: 'Available', value: INR(Math.max(0, available)), icon: DollarSign, color: '#4f8ef7' },
+              { label: 'Realised P&L', value: INR(totalPnL), icon: totalPnL >= 0 ? TrendingUp : TrendingDown, pnl: totalPnL },
+            ].map((m, i) => (
+              <div key={i} className="bg-[#111118] border border-white/[0.07] rounded-xl p-5 hover:border-white/[0.14] transition-all duration-150">
+                <div className="flex items-center gap-2 mb-2">
+                  <m.icon size={14} className="text-text-dim" />
+                  <div className="text-[10px] font-bold tracking-wider text-text-muted uppercase">{m.label}</div>
+                </div>
+                <div className={`text-[22px] font-bold font-mono tabular-nums ${m.pnl !== undefined ? (m.pnl >= 0 ? 'text-[#34d48a]' : 'text-[#f7614f]') : `text-[${m.color}]`}`}>
+                  {m.pnl !== undefined && m.pnl >= 0 && '+'}
+                  {m.value}
+                </div>
+              </div>
             ))}
           </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center h-[200px]">
-              <Loader2 className="w-8 h-8 animate-spin text-accent" />
-            </div>
-          ) : (
-            (tab === 'open' ? openTrades : closedTrades).length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[240px] glass-panel border-dashed border-white/10">
-                <div className="text-[32px] mb-3 opacity-80 filter drop-shadow-lg">{tab === 'open' ? '📋' : '📜'}</div>
-                <div className="text-text-muted text-[13px] font-medium">No {tab} trades yet</div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {(tab === 'open' ? openTrades : closedTrades).map(t => (
-                  <TradeCard 
-                    key={t.id} 
-                    trade={t} 
-                    ltp={livePrices[t.symbol]}
-                    onClose={(trade, exitPrice) => closeOrderMutation.mutateAsync({ trade, exitPrice })} 
-                  />
+          <div className="grid grid-cols-[380px_1fr] gap-5">
+            {/* Order Form */}
+            <PaperTradeForm 
+              onSubmit={(data) => placeOrderMutation.mutate(data)} 
+              isSubmitting={placeOrderMutation.isPending} 
+            />
+
+            {/* Trades Panel */}
+            <div>
+              <div className="flex gap-2 mb-4">
+                {['open', 'closed'].map(t => (
+                  <button 
+                    key={t} 
+                    onClick={() => setTab(t)} 
+                    className={`px-4 py-2 text-[12px] font-medium rounded-lg border transition-all duration-150 capitalize ${
+                      tab === t 
+                        ? 'bg-[rgba(79,142,247,0.08)] border-[rgba(79,142,247,0.3)] text-[#4f8ef7]' 
+                        : 'bg-transparent border-white/[0.07] text-text-muted hover:text-white hover:border-white/[0.14]'
+                    }`}
+                  >
+                    {t} ({t === 'open' ? openTrades.length : closedTrades.length})
+                  </button>
                 ))}
               </div>
-            )
-          )}
-        </div>
-      </div>
+
+              {isLoading ? (
+                <div className="flex items-center justify-center h-[200px]">
+                  <Loader2 className="w-8 h-8 animate-spin text-[#4f8ef7]" />
+                </div>
+              ) : (
+                (tab === 'open' ? openTrades : closedTrades).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[240px] bg-[#111118] border border-dashed border-white/[0.14] rounded-xl">
+                    <div className="text-[32px] mb-3 opacity-60">{tab === 'open' ? '&#128203;' : '&#128220;'}</div>
+                    <div className="text-text-muted text-[13px] font-medium">No {tab} trades yet</div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {(tab === 'open' ? openTrades : closedTrades).map(t => (
+                      <TradeCard 
+                        key={t.id} 
+                        trade={t} 
+                        ltp={livePrices[t.symbol]}
+                        onClose={(trade, exitPrice) => closeOrderMutation.mutateAsync({ trade, exitPrice })} 
+                      />
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

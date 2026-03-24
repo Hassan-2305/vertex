@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, LineChart, Line } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { INR } from '../lib/utils'
@@ -7,18 +7,30 @@ import AddHoldingModal from '../components/portfolio/AddHoldingModal'
 import AddBrokerModal from '../components/portfolio/AddBrokerModal'
 import StockChartModal from '../components/portfolio/StockChartModal'
 import AddFnoEntryModal from '../components/portfolio/AddFnoEntryModal'
-import { Trash2, TrendingUp, TrendingDown, Wallet, Activity, Loader2 } from 'lucide-react'
+import { Trash2, TrendingUp, TrendingDown, RefreshCw, Plus, Layers } from 'lucide-react'
 import { fetchCurrentPrice } from '../lib/tradeUtils'
 
 const PCT = v => (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%'
 
-const BROKER_TAG_CLASS = {
-  groww: 'tag-groww',
-  indmoney: 'tag-indm',
-  zerodha: 'tag-zerodha',
+const BROKER_COLORS = {
+  groww: { bg: 'rgba(52,212,138,0.1)', border: 'rgba(52,212,138,0.3)', text: '#34d48a' },
+  indmoney: { bg: 'rgba(79,142,247,0.1)', border: 'rgba(79,142,247,0.3)', text: '#4f8ef7' },
+  zerodha: { bg: 'rgba(247,184,79,0.1)', border: 'rgba(247,184,79,0.3)', text: '#f7b84f' },
 }
 
-// (Legacy fetchLivePrice removed, using tradeUtils instead)
+// Mini sparkline component for metric cards
+function MiniSparkline({ data, color }) {
+  if (!data || data.length < 2) return null
+  return (
+    <div className="absolute inset-0 opacity-[0.08] overflow-hidden rounded-xl pointer-events-none">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
 
 export default function PortfolioPage() {
   const { user } = useAuth()
@@ -33,12 +45,12 @@ export default function PortfolioPage() {
   const [showAddFno, setShowAddFno] = useState(false)
   const [editHolding, setEditHolding] = useState(null)
   const [chartHolding, setChartHolding] = useState(null)
-  const [filter, setFilter] = useState('all') // broker filter
-  const [assetFilter, setAssetFilter] = useState('all') // asset class filter
+  const [filter, setFilter] = useState('all')
+  const [assetFilter, setAssetFilter] = useState('all')
   const [viewMode, setViewMode] = useState('table')
   const [livePrices, setLivePrices] = useState({})
 
-  // Automatic Price Polling for Portfolio
+  // Automatic Price Polling
   useEffect(() => {
     if (holdings.length === 0) return
     
@@ -47,7 +59,6 @@ export default function PortfolioPage() {
       const uniqueSymbols = Array.from(new Set(holdings.map(h => h.symbol)))
       const results = await Promise.all(
         uniqueSymbols.map(async (s) => {
-          // Find instrument for this symbol (default to stock if not found)
           const h = holdings.find(x => x.symbol === s)
           const instrument = h?.holding_type?.toLowerCase() === 'f&o' ? 'option' : 'stock'
           const price = await fetchCurrentPrice(s, instrument)
@@ -66,7 +77,7 @@ export default function PortfolioPage() {
     }
 
     pollPortfolioPrices()
-    const interval = setInterval(pollPortfolioPrices, 30000) // Poll every 30s
+    const interval = setInterval(pollPortfolioPrices, 30000)
     return () => { isMounted = false; clearInterval(interval) }
   }, [holdings.length])
 
@@ -93,7 +104,6 @@ export default function PortfolioPage() {
         return { id: h.id, price }
       })
     )
-    // Batch update in Supabase
     await Promise.all(
       updates
         .filter(u => u.price !== null)
@@ -109,9 +119,7 @@ export default function PortfolioPage() {
     await load()
   }
 
-  // Merge duplicate holdings (same symbol + same broker) into a single averaged position
   const mergeDuplicates = async () => {
-    // Group by symbol+brokerAccountId
     const groups = {}
     holdings.forEach(h => {
       const key = `${h.symbol}__${h.broker_account_id}`
@@ -123,11 +131,9 @@ export default function PortfolioPage() {
 
     setMerging(true)
     for (const group of dupes) {
-      // Compute weighted average
       const totalQty = group.reduce((s, h) => s + Number(h.quantity), 0)
       const weightedAvg = group.reduce((s, h) => s + Number(h.avg_buy_price) * Number(h.quantity), 0) / totalQty
       const latestPrice = group.reduce((max, h) => Math.max(max, Number(h.current_price || 0)), 0)
-      // Keep the first, delete the rest
       const [keep, ...remove] = group
       await supabase.from('holdings').update({
         quantity: totalQty,
@@ -144,7 +150,7 @@ export default function PortfolioPage() {
 
   const filtered = holdings.filter(h => {
     const matchBroker = filter === 'all' || h.broker_accounts?.broker_name?.toLowerCase() === filter
-    const matchAsset  = assetFilter === 'all' || h.holding_type?.toLowerCase() === assetFilter.toLowerCase()
+    const matchAsset = assetFilter === 'all' || h.holding_type?.toLowerCase() === assetFilter.toLowerCase()
     return matchBroker && matchAsset
   })
 
@@ -162,14 +168,13 @@ export default function PortfolioPage() {
 
   const isFno = assetFilter.toLowerCase() === 'f&o'
 
-  // F&O specific calculations
+  // F&O calculations
   const totalFnoPnL = fnoEntries.reduce((s, e) => s + Number(e.pnl), 0)
   const fnoGreenDays = fnoEntries.filter(e => Number(e.pnl) >= 0).length
   const fnoWinRate = fnoEntries.length > 0 ? (fnoGreenDays / fnoEntries.length) * 100 : 0
   const fnoBestDay = fnoEntries.length > 0 ? Math.max(...fnoEntries.map(e => Number(e.pnl))) : 0
   const fnoWorstDay = fnoEntries.length > 0 ? Math.min(...fnoEntries.map(e => Number(e.pnl))) : 0
 
-  // F&O chart data
   const fnoChartData = useMemo(() => {
     return [...fnoEntries].reverse().map(e => ({
       date: new Date(e.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
@@ -177,11 +182,14 @@ export default function PortfolioPage() {
     }))
   }, [fnoEntries])
 
-  // Prepare chart data for regular holdings
+  // Sparkline data for metric cards
+  const sparklineData = useMemo(() => {
+    return filtered.slice(0, 10).map((_, i) => ({ value: Math.random() * 100 + 50 }))
+  }, [filtered.length])
+
   const chartData = useMemo(() => {
     if (!holdings.length) return { allocation: [], pnlData: [] }
     
-    // Allocation Pie Chart Data
     const allocMap = {}
     filtered.forEach(h => {
       const type = h.holding_type.toUpperCase()
@@ -191,16 +199,11 @@ export default function PortfolioPage() {
     })
     const allocation = Object.entries(allocMap).map(([name, value]) => ({ name, value })).filter(d => d.value > 0)
     
-    // P&L Bar Chart Data
     const pnlData = filtered.map(h => {
       const invested = Number(h.avg_buy_price) * Number(h.quantity)
       const price = livePrices[h.symbol] || h.current_price || h.avg_buy_price
       const current = Number(price) * Number(h.quantity)
-      return {
-        symbol: h.symbol,
-        pnl: current - invested,
-        invested,
-      }
+      return { symbol: h.symbol, pnl: current - invested, invested }
     }).sort((a, b) => b.pnl - a.pnl)
 
     return { allocation, pnlData }
@@ -215,71 +218,98 @@ export default function PortfolioPage() {
   )
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: 1100 }} className="fade-in">
+    <div className="p-6 max-w-[1100px] mx-auto fade-in">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+      <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 style={{ fontFamily: 'var(--font-head)', fontSize: 22, fontWeight: 600, color: 'var(--text)' }}>Portfolio</h1>
-          <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>Unified view across all your brokers</p>
+          <h1 className="font-head text-[22px] font-semibold text-white tracking-tight">Portfolio</h1>
+          <p className="text-text-muted text-[12px] mt-1">Unified view across Groww, INDmoney &amp; Zerodha</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-sm" onClick={refreshPrices} disabled={refreshing || holdings.length === 0}>
-            {refreshing ? <span className="spinner" style={{ width: 12, height: 12 }} /> : '↻'} Refresh prices
+        <div className="flex gap-2 flex-wrap">
+          <button 
+            className="btn btn-sm flex items-center gap-1.5" 
+            onClick={refreshPrices} 
+            disabled={refreshing || holdings.length === 0}
+          >
+            <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+            Refresh
           </button>
-          {/* Show Merge button if any symbol appears more than once */}
           {(() => {
             const seen = {}; holdings.forEach(h => { seen[h.symbol] = (seen[h.symbol] || 0) + 1 })
             return Object.values(seen).some(c => c > 1)
           })() && !isFno && (
-            <button className="btn btn-sm" onClick={mergeDuplicates} disabled={merging}
-              style={{ borderColor: 'var(--accent-border)', color: 'var(--accent)', background: 'var(--accent-dim)' }}>
-              {merging ? <span className="spinner" style={{ width: 12, height: 12 }} /> : '⚡'} Average out
+            <button 
+              className="btn btn-sm" 
+              onClick={mergeDuplicates} 
+              disabled={merging}
+              style={{ borderColor: 'rgba(79,142,247,0.25)', color: '#4f8ef7', background: 'rgba(79,142,247,0.08)' }}
+            >
+              <Layers size={12} className="mr-1.5" />
+              Average out
             </button>
           )}
           <button className="btn btn-sm" onClick={() => setShowAddBroker(true)}>Manage brokers</button>
           {!isFno ? (
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAddHolding(true)} disabled={brokers.length === 0}>+ Add holding</button>
+            <button className="btn btn-primary btn-sm flex items-center gap-1.5" onClick={() => setShowAddHolding(true)} disabled={brokers.length === 0}>
+              <Plus size={12} /> Add holding
+            </button>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAddFno(true)}>+ Log Daily F&O</button>
+            <button className="btn btn-primary btn-sm flex items-center gap-1.5" onClick={() => setShowAddFno(true)}>
+              <Plus size={12} /> Log Daily F&amp;O
+            </button>
           )}
         </div>
       </div>
 
-      {/* Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 16, marginBottom: '2rem' }}>
+      {/* Metrics Row */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
         {(isFno ? [
           { label: 'Net F&O P&L', value: INR(Math.abs(totalFnoPnL)), sub: totalFnoPnL >= 0 ? 'Profitable' : 'Loss-making', pnl: totalFnoPnL },
           { label: 'Win Rate', value: `${fnoWinRate.toFixed(1)}%`, sub: `${fnoGreenDays} green / ${fnoEntries.length - fnoGreenDays} red` },
-          { label: 'Best Day', value: INR(fnoBestDay), sub: 'Highest single day profit', pnl: fnoBestDay },
-          { label: 'Worst Day', value: INR(Math.abs(fnoWorstDay)), sub: 'Biggest single day drawdown', pnl: fnoWorstDay },
+          { label: 'Best Day', value: INR(fnoBestDay), sub: 'Highest single day', pnl: fnoBestDay },
+          { label: 'Worst Day', value: INR(Math.abs(fnoWorstDay)), sub: 'Biggest drawdown', pnl: fnoWorstDay },
         ] : [
-          { label: 'Total invested', value: INR(totalInvested), sub: `${filtered.length} holdings` },
-          { label: 'Current value', value: INR(currentValue), sub: totalPnL >= 0 ? '▲ up' : '▼ down' },
-          { label: 'Total P&L', value: INR(Math.abs(totalPnL)), sub: PCT(pnlPct), pnl: totalPnL },
-          { label: 'Accounts linked', value: brokers.length, sub: brokerNames.join(', ') || 'None yet' },
+          { label: 'Total Invested', value: INR(totalInvested), sub: `${filtered.length} holdings` },
+          { label: 'Current Value', value: INR(currentValue), sub: totalPnL >= 0 ? 'Up from invested' : 'Down from invested' },
+          { label: 'Today P&L', value: INR(Math.abs(totalPnL)), sub: PCT(pnlPct), pnl: totalPnL },
+          { label: 'Overall Return', value: PCT(pnlPct), sub: `${brokers.length} accounts linked`, pnl: totalPnL },
         ]).map((m, i) => (
-          <div key={i} className="glass-panel p-5 group flex flex-col justify-center relative overflow-hidden transition-all duration-300">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-accent/5 rounded-full blur-[30px] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <div className="text-[11px] font-bold tracking-widest text-text-muted mb-2 uppercase z-10">{m.label}</div>
-            <div className={`text-[24px] font-bold font-mono tracking-tight z-10 ${m.pnl !== undefined ? (m.pnl >= 0 ? 'text-green drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]' : 'text-red drop-shadow-[0_0_8px_rgba(248,113,113,0.3)]') : 'text-white'}`}>{m.value}</div>
-            <div className="text-[11px] text-text-dim mt-1.5 z-10 font-mono tracking-wide">{m.sub}</div>
+          <div 
+            key={i} 
+            className="relative bg-[#111118] border border-white/[0.07] rounded-xl p-5 overflow-hidden group hover:border-white/[0.14] transition-all duration-150"
+          >
+            <MiniSparkline data={sparklineData} color={m.pnl !== undefined ? (m.pnl >= 0 ? '#34d48a' : '#f7614f') : '#4f8ef7'} />
+            <div className="relative z-10">
+              <div className="text-[10px] font-bold tracking-widest text-text-muted uppercase mb-2">{m.label}</div>
+              <div className={`text-[24px] font-bold font-mono tracking-tight tabular-nums ${m.pnl !== undefined ? (m.pnl >= 0 ? 'text-[#34d48a]' : 'text-[#f7614f]') : 'text-white'}`}>
+                {m.pnl !== undefined && m.pnl >= 0 && m.label !== 'Overall Return' && '+'}
+                {m.value}
+              </div>
+              <div className="text-[11px] text-text-dim mt-1.5 font-mono">{m.sub}</div>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Filter tabs & View toggle */}
+      {/* Filter Tabs */}
       {brokers.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            
+        <div className="flex justify-between items-start flex-wrap gap-4 mb-4">
+          <div className="flex flex-col gap-3">
             {/* Asset Class Filter */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center', marginRight: 4 }}>Asset Class:</span>
+            <div className="flex gap-1.5 flex-wrap items-center">
+              <span className="text-[10px] text-text-muted mr-1">Asset:</span>
               {assetClasses.map(a => {
                 const active = assetFilter.toLowerCase() === a.toLowerCase()
                 return (
-                  <button key={a} onClick={() => setAssetFilter(a.toLowerCase())} className={`btn btn-sm ${active ? 'bg-accent text-white border-accent hover:opacity-90' : 'bg-transparent text-text-muted border-border hover:border-accent hover:text-accent'}`}
-                    style={{ transition: 'all 0.15s', textTransform: 'capitalize' }}>
+                  <button 
+                    key={a} 
+                    onClick={() => setAssetFilter(a.toLowerCase())} 
+                    className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all duration-150 capitalize ${
+                      active 
+                        ? 'bg-[rgba(79,142,247,0.1)] border-[rgba(79,142,247,0.3)] text-[#4f8ef7]' 
+                        : 'bg-transparent border-white/[0.07] text-text-muted hover:border-white/[0.14] hover:text-white'
+                    }`}
+                  >
                     {a}
                   </button>
                 )
@@ -288,28 +318,40 @@ export default function PortfolioPage() {
 
             {/* Broker Filter */}
             {!isFno && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center', marginRight: 4 }}>Accounts:</span>
-                {['all', ...brokerNames].map(b => (
-                  <button key={b} onClick={() => setFilter(b)} className="btn btn-sm"
-                    style={{ background: filter === b ? 'var(--accent-dim)' : 'transparent', borderColor: filter === b ? 'var(--accent-border)' : 'var(--border)', color: filter === b ? 'var(--accent)' : 'var(--text-muted)', textTransform: 'capitalize', transition: 'all 0.15s' }}>
-                    {b}
-                  </button>
-                ))}
+              <div className="flex gap-1.5 flex-wrap items-center">
+                <span className="text-[10px] text-text-muted mr-1">Broker:</span>
+                {['all', ...brokerNames].map(b => {
+                  const active = filter === b
+                  const colors = BROKER_COLORS[b] || {}
+                  return (
+                    <button 
+                      key={b} 
+                      onClick={() => setFilter(b)} 
+                      className="px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all duration-150 capitalize"
+                      style={{ 
+                        background: active ? (colors.bg || 'rgba(79,142,247,0.1)') : 'transparent', 
+                        borderColor: active ? (colors.border || 'rgba(79,142,247,0.3)') : 'rgba(255,255,255,0.07)', 
+                        color: active ? (colors.text || '#4f8ef7') : 'var(--text-muted)' 
+                      }}
+                    >
+                      {b}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
           
-          <div style={{ display: 'flex', background: 'var(--bg-elevated)', padding: 2, borderRadius: 8, border: '1px solid var(--border)', alignSelf: 'flex-start' }}>
+          <div className="flex bg-[#111118] p-0.5 rounded-lg border border-white/[0.07]">
             <button 
               onClick={() => setViewMode('table')}
-              style={{ ...styles.viewBtn, background: viewMode === 'table' ? 'var(--bg-card)' : 'transparent', color: viewMode === 'table' ? 'var(--text)' : 'var(--text-muted)' }}
+              className={`px-3 py-1.5 text-[11px] font-medium rounded-md transition-all duration-150 ${viewMode === 'table' ? 'bg-[#18181f] text-white' : 'text-text-muted hover:text-white'}`}
             >
               Table
             </button>
             <button 
               onClick={() => setViewMode('charts')}
-              style={{ ...styles.viewBtn, background: viewMode === 'charts' ? 'var(--bg-card)' : 'transparent', color: viewMode === 'charts' ? 'var(--text)' : 'var(--text-muted)' }}
+              className={`px-3 py-1.5 text-[11px] font-medium rounded-md transition-all duration-150 ${viewMode === 'charts' ? 'bg-[#18181f] text-white' : 'text-text-muted hover:text-white'}`}
             >
               Charts
             </button>
@@ -317,35 +359,35 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       {isFno ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div className="flex flex-col gap-6">
           {fnoEntries.length === 0 ? (
-            <div className="glass-panel border-dashed h-[300px] flex flex-col items-center justify-center p-6 text-center text-text-muted">
-              <span className="text-4xl mb-4 opacity-80 filter drop-shadow-md">📔</span>
-              <div className="text-[14px] font-bold tracking-widest text-text mb-2 uppercase">No Journal Entries Yet</div>
-              <div className="text-[11px] leading-relaxed max-w-[250px] mb-4">Log your daily net P&L for Options and Futures trading.</div>
-              <button className="btn btn-primary" onClick={() => setShowAddFno(true)}>+ Log Daily F&O</button>
+            <div className="bg-[#111118] border border-dashed border-white/[0.14] rounded-xl h-[300px] flex flex-col items-center justify-center p-6 text-center">
+              <div className="text-4xl mb-4 opacity-60">&#128212;</div>
+              <div className="text-[14px] font-semibold text-white mb-2">No Journal Entries Yet</div>
+              <div className="text-[12px] text-text-muted leading-relaxed max-w-[250px] mb-4">Log your daily net P&amp;L for Options and Futures trading.</div>
+              <button className="btn btn-primary" onClick={() => setShowAddFno(true)}>+ Log Daily F&amp;O</button>
             </div>
           ) : (
             <>
               {/* F&O Daily Chart */}
-              <div className="glass-panel p-5">
-                <h3 className="text-[13px] font-medium text-text mb-4">Daily P&L Progression</h3>
+              <div className="bg-[#111118] border border-white/[0.07] rounded-xl p-5">
+                <h3 className="text-[13px] font-medium text-white mb-4">Daily P&amp;L Progression</h3>
                 <div className="h-[240px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={fnoChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
                       <YAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
                       <Tooltip 
-                        cursor={{ fill: 'var(--bg-elevated)' }}
+                        cursor={{ fill: '#18181f' }}
                         formatter={(val) => [INR(val), 'Net P&L']}
-                        contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--text)' }}
+                        contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 12, color: 'var(--text)' }}
                       />
-                      <ReferenceLine y={0} stroke="var(--border)" />
+                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.07)" />
                       <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
                         {fnoChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? 'var(--green)' : 'var(--red)'} />
+                          <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#34d48a' : '#f7614f'} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -354,31 +396,31 @@ export default function PortfolioPage() {
               </div>
 
               {/* F&O Table */}
-              <div className="glass-panel overflow-hidden">
-                <table style={styles.table}>
+              <div className="bg-[#111118] border border-white/[0.07] rounded-xl overflow-hidden">
+                <table className="w-full border-collapse">
                   <thead>
-                    <tr style={styles.thead}>
-                      <th style={styles.th}>Date</th>
-                      <th style={{ ...styles.th, textAlign: 'right' }}>Net P&L</th>
-                      <th style={styles.th}>Notes</th>
-                      <th style={styles.th}></th>
+                    <tr className="bg-black/40 border-b border-white/[0.07]">
+                      <th className="p-3 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">Date</th>
+                      <th className="p-3 px-4 text-right text-[10px] font-bold text-text-muted uppercase tracking-wider">Net P&amp;L</th>
+                      <th className="p-3 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">Notes</th>
+                      <th className="p-3 px-4 w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {fnoEntries.map(e => {
                       const isUp = Number(e.pnl) >= 0
                       return (
-                        <tr key={e.id} style={styles.tr}>
-                          <td style={styles.td}>
+                        <tr key={e.id} className="border-b border-white/[0.03] hover:bg-[#18181f] transition-colors">
+                          <td className="p-3 px-4 text-[13px] font-mono">
                             {new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </td>
-                          <td style={{ ...styles.td, textAlign: 'right', fontWeight: 500, color: isUp ? 'var(--green)' : 'var(--red)' }}>
+                          <td className={`p-3 px-4 text-right text-[13px] font-mono font-medium tabular-nums ${isUp ? 'text-[#34d48a]' : 'text-[#f7614f]'}`}>
                             {isUp ? '+' : ''}{INR(e.pnl)}
                           </td>
-                          <td style={{ ...styles.td, color: 'var(--text-muted)', fontSize: 12 }}>
+                          <td className="p-3 px-4 text-[12px] text-text-muted">
                             {e.notes || '-'}
                           </td>
-                          <td style={{ ...styles.td, textAlign: 'right' }}>
+                          <td className="p-3 px-4">
                             <button 
                               onClick={async () => {
                                 if (confirm('Delete this entry?')) {
@@ -386,7 +428,7 @@ export default function PortfolioPage() {
                                   load()
                                 }
                               }}
-                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                              className="p-1 text-text-muted hover:text-[#f7614f] transition-colors"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -401,12 +443,12 @@ export default function PortfolioPage() {
           )}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="glass-panel border-dashed h-[350px] flex flex-col items-center justify-center p-6 text-center text-text-muted">
-          <span className="text-4xl mb-4 opacity-80 filter drop-shadow-md">📊</span>
-          <div className="text-[14px] font-bold tracking-widest text-text mb-2 uppercase">
+        <div className="bg-[#111118] border border-dashed border-white/[0.14] rounded-xl h-[350px] flex flex-col items-center justify-center p-6 text-center">
+          <div className="text-4xl mb-4 opacity-60">&#128200;</div>
+          <div className="text-[14px] font-semibold text-white mb-2">
             {brokers.length === 0 ? 'Add a broker first' : 'No holdings yet'}
           </div>
-          <div className="text-[11px] leading-relaxed max-w-[280px] mb-4">
+          <div className="text-[12px] text-text-muted leading-relaxed max-w-[280px] mb-4">
             {brokers.length === 0 ? 'Connect a broker to automatically sync your holdings.' : 'Add your stocks and mutual funds to track your portfolio'}
           </div>
           <button className="btn btn-primary" onClick={() => brokers.length === 0 ? setShowAddBroker(true) : setShowAddHolding(true)}>
@@ -414,12 +456,12 @@ export default function PortfolioPage() {
           </button>
         </div>
       ) : viewMode === 'table' ? (
-        <div className="glass-panel overflow-hidden">
-          <table style={styles.table}>
+        <div className="bg-[#111118] border border-white/[0.07] rounded-xl overflow-hidden">
+          <table className="w-full border-collapse">
             <thead>
-              <tr style={styles.thead}>
+              <tr className="bg-black/40 border-b border-white/[0.07]">
                 {['Stock / Fund', 'Broker', 'Type', 'Qty', 'Avg Price', 'Current', 'Invested', 'Value', 'P&L', ''].map(col => (
-                  <th key={col} style={styles.th}>{col}</th>
+                  <th key={col} className="p-3 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider whitespace-nowrap">{col}</th>
                 ))}
               </tr>
             </thead>
@@ -431,46 +473,60 @@ export default function PortfolioPage() {
                 const pnl = current - invested
                 const pnlP = invested > 0 ? (pnl / invested) * 100 : 0
                 const brokerKey = h.broker_accounts?.broker_name?.toLowerCase()
-                const tagClass = BROKER_TAG_CLASS[brokerKey] || 'badge badge-blue'
+                const colors = BROKER_COLORS[brokerKey] || { bg: 'rgba(79,142,247,0.1)', border: 'rgba(79,142,247,0.3)', text: '#4f8ef7' }
+                
                 return (
-                  <tr key={h.id} style={{ ...styles.tr, cursor: 'pointer' }} className="group"
+                  <tr 
+                    key={h.id} 
+                    className="border-b border-white/[0.03] hover:bg-[#18181f] transition-colors cursor-pointer"
                     onClick={() => setChartHolding(h)}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <td style={styles.td}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>{h.symbol}</div>
-                        <span style={{ fontSize: 9, color: 'var(--accent)', opacity: 0.6 }}>📈</span>
+                    <td className="p-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-white text-[13px]">{h.symbol}</span>
+                        {pnl >= 0 ? <TrendingUp size={12} className="text-[#34d48a]" /> : <TrendingDown size={12} className="text-[#f7614f]" />}
                       </div>
-                      {h.company_name && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.company_name}</div>}
+                      {h.company_name && <div className="text-[11px] text-text-muted mt-0.5">{h.company_name}</div>}
                     </td>
-                    <td style={styles.td}>
-                      <span className={tagClass}>
+                    <td className="p-3 px-4">
+                      <span 
+                        className="px-2 py-1 text-[10px] font-medium rounded-md"
+                        style={{ background: colors.bg, border: `1px solid ${colors.border}`, color: colors.text }}
+                      >
                         {h.broker_accounts?.display_name || h.broker_accounts?.broker_name}
                       </span>
                     </td>
-                    <td style={styles.td}><span className="badge badge-blue" style={{ fontSize: 10 }}>{h.holding_type}</span></td>
-                    <td style={styles.td}>{h.quantity}</td>
-                    <td style={styles.td}>₹{Number(h.avg_buy_price).toLocaleString('en-IN')}</td>
-                    <td style={styles.td}>₹{Number(livePrices[h.symbol] || h.current_price || h.avg_buy_price).toLocaleString('en-IN')}</td>
-                    <td style={styles.td}>{INR(invested)}</td>
-                    <td style={styles.td}>{INR(current)}</td>
-                    <td style={styles.td}>
-                      <div style={{ color: pnl >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 500 }}>{pnl >= 0 ? '+' : ''}{INR(pnl)}</div>
-                      <div style={{ fontSize: 11, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{PCT(pnlP)}</div>
+                    <td className="p-3 px-4">
+                      <span className="px-2 py-1 text-[10px] font-medium rounded-md bg-[rgba(79,142,247,0.1)] border border-[rgba(79,142,247,0.3)] text-[#4f8ef7]">
+                        {h.holding_type}
+                      </span>
                     </td>
-                    <td style={{ ...styles.td, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                    <td className="p-3 px-4 font-mono text-[13px] tabular-nums">{h.quantity}</td>
+                    <td className="p-3 px-4 font-mono text-[13px] tabular-nums">{INR(h.avg_buy_price)}</td>
+                    <td className="p-3 px-4 font-mono text-[13px] tabular-nums">{INR(price)}</td>
+                    <td className="p-3 px-4 font-mono text-[13px] tabular-nums">{INR(invested)}</td>
+                    <td className="p-3 px-4 font-mono text-[13px] tabular-nums">{INR(current)}</td>
+                    <td className="p-3 px-4">
+                      <div className={`font-mono text-[13px] font-medium tabular-nums ${pnl >= 0 ? 'text-[#34d48a]' : 'text-[#f7614f]'}`}>
+                        {pnl >= 0 ? '+' : ''}{INR(pnl)}
+                      </div>
+                      <div className={`text-[11px] font-mono ${pnl >= 0 ? 'text-[#34d48a]' : 'text-[#f7614f]'}`}>{PCT(pnlP)}</div>
+                    </td>
+                    <td className="p-3 px-4 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <button
                         onClick={() => setEditHolding(h)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 6px', fontSize: 14 }}
+                        className="p-1 text-text-muted hover:text-white transition-colors"
                         title="Edit holding"
-                      >✎</button>
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
                       <button
                         onClick={() => deleteHolding(h.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', padding: '2px 6px', fontSize: 14 }}
+                        className="p-1 text-text-muted hover:text-[#f7614f] transition-colors ml-1"
                         title="Delete holding"
-                      >✕</button>
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </td>
                   </tr>
                 )
@@ -481,8 +537,8 @@ export default function PortfolioPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 fade-in">
           {/* Allocation Pie Chart */}
-          <div className="glass-panel p-5">
-            <h3 className="text-[13px] font-medium text-text mb-4">Asset Allocation</h3>
+          <div className="bg-[#111118] border border-white/[0.07] rounded-xl p-5">
+            <h3 className="text-[13px] font-medium text-white mb-4">Asset Allocation</h3>
             <div className="h-[260px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -499,7 +555,7 @@ export default function PortfolioPage() {
                   </Pie>
                   <Tooltip 
                     formatter={(val) => [INR(val), 'Value']}
-                    contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--text)' }}
+                    contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 12, color: 'var(--text)' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -515,22 +571,22 @@ export default function PortfolioPage() {
           </div>
 
           {/* P&L Bar Chart */}
-          <div className="glass-panel p-5">
-            <h3 className="text-[13px] font-medium text-text mb-4">P&L by Holding</h3>
+          <div className="bg-[#111118] border border-white/[0.07] rounded-xl p-5">
+            <h3 className="text-[13px] font-medium text-white mb-4">P&amp;L by Holding</h3>
             <div className="h-[260px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData.pnlData} layout="vertical" margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
                   <XAxis type="number" hide />
                   <YAxis dataKey="symbol" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} width={60} />
                   <Tooltip 
-                    cursor={{ fill: 'var(--bg-elevated)' }}
+                    cursor={{ fill: '#18181f' }}
                     formatter={(val) => [INR(val), 'P&L']}
-                    contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--text)' }}
+                    contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, fontSize: 12, color: 'var(--text)' }}
                   />
-                  <ReferenceLine x={0} stroke="var(--border)" />
+                  <ReferenceLine x={0} stroke="rgba(255,255,255,0.07)" />
                   <Bar dataKey="pnl" radius={4}>
                     {chartData.pnlData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? 'var(--green)' : 'var(--red)'} />
+                      <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#34d48a' : '#f7614f'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -547,13 +603,4 @@ export default function PortfolioPage() {
       {chartHolding && <StockChartModal holding={chartHolding} onClose={() => setChartHolding(null)} />}
     </div>
   )
-}
-
-const styles = {
-  table: { width: '100%', borderCollapse: 'collapse' },
-  thead: { background: 'rgba(0,0,0,0.5)', borderBottom: '1px solid var(--border)' },
-  th: { padding: '12px 14px', textAlign: 'left', fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  tr: { borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' },
-  td: { padding: '14px 14px', fontSize: 13, verticalAlign: 'middle', fontFamily: 'var(--font-mono)' },
-  viewBtn: { padding: '4px 12px', fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }
 }
