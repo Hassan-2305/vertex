@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -38,7 +37,6 @@ export default function PaperTradeForm({ onSubmit, isSubmitting }) {
   const entryPrice = watch('entry_price')
   const quantity = watch('quantity')
 
-  // Auto-fill lot size when symbol or instrument changes
   const handleSymbolChange = (e) => {
     setValue('symbol', e.target.value)
     if (instrument !== 'stock') {
@@ -56,25 +54,31 @@ export default function PaperTradeForm({ onSubmit, isSubmitting }) {
   }
 
   return (
-    <div className="glass-panel p-6 relative overflow-hidden group">
-      {/* Subtle glow effect behind form */}
-      <div className="absolute -top-24 -right-24 w-48 h-48 bg-accent/10 rounded-full blur-[60px] pointer-events-none group-hover:bg-accent/20 transition-colors duration-700" />
-      
-      <div className="text-[11px] font-bold tracking-widest text-text-muted mb-5 flex items-center gap-2">
-        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-        PLACE ORDER
+    <div className="bg-[#111118] border border-white/[0.07] rounded-xl p-5">
+      <div className="text-[10px] font-bold tracking-widest text-text-muted mb-4 flex items-center gap-2 uppercase">
+        <div className="w-1.5 h-1.5 rounded-full bg-[#4f8ef7] animate-pulse" />
+        Place Order
       </div>
+      
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label>Symbol</label>
-            <select {...register('symbol')} onChange={handleSymbolChange}>
+            <label className="block text-[11px] font-medium text-text-muted mb-1.5">Symbol</label>
+            <select 
+              {...register('symbol')} 
+              onChange={handleSymbolChange}
+              className="w-full py-2.5 px-3 bg-[#0a0a0f] border border-white/[0.07] rounded-lg text-white text-[13px] focus:border-[#4f8ef7]/50 focus:outline-none transition-colors"
+            >
               {FO_SYMBOLS.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label>Instrument</label>
-            <select {...register('instrument')} onChange={handleInstrumentChange}>
+            <label className="block text-[11px] font-medium text-text-muted mb-1.5">Instrument</label>
+            <select 
+              {...register('instrument')} 
+              onChange={handleInstrumentChange}
+              className="w-full py-2.5 px-3 bg-[#0a0a0f] border border-white/[0.07] rounded-lg text-white text-[13px] focus:border-[#4f8ef7]/50 focus:outline-none transition-colors"
+            >
               <option value="call">Call Option</option>
               <option value="put">Put Option</option>
               <option value="futures">Futures</option>
@@ -83,70 +87,107 @@ export default function PaperTradeForm({ onSubmit, isSubmitting }) {
           </div>
         </div>
 
-        <div className="flex bg-black/40 backdrop-blur-sm border border-white/5 rounded-lg p-1 gap-1 shadow-inner my-2">
+        {/* BUY / SELL Toggle */}
+        <div className="flex bg-[#0a0a0f] p-1 rounded-lg border border-white/[0.07] gap-1 my-1">
           {['buy', 'sell'].map(t => (
-            <button key={t} type="button" onClick={() => setValue('trade_type', t)}
+            <button 
+              key={t} 
+              type="button" 
+              onClick={() => setValue('trade_type', t)}
               className={cn(
-                "flex-1 p-2 border-none cursor-pointer text-[12px] font-bold tracking-wider rounded-md transition-all duration-300",
+                "flex-1 py-2.5 rounded-md text-[12px] font-bold tracking-wider transition-all duration-150",
                 tradeType === t
-                  ? (t === 'buy' ? 'bg-green text-black shadow-[0_0_15px_rgba(52,211,153,0.3)]' : 'bg-red text-white shadow-[0_0_15px_rgba(248,113,113,0.3)]')
+                  ? (t === 'buy' 
+                      ? 'bg-[#34d48a] text-[#0a0a0f] shadow-[0_0_15px_rgba(52,212,138,0.3)]' 
+                      : 'bg-[#f7614f] text-white shadow-[0_0_15px_rgba(247,97,79,0.3)]')
                   : 'bg-transparent text-text-muted hover:text-white hover:bg-white/5'
-              )}>
+              )}
+            >
               {t === 'buy' ? 'BUY / LONG' : 'SELL / SHORT'}
             </button>
           ))}
         </div>
 
         {instrument !== 'stock' && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label>Strike price</label>
-              <input type="number" placeholder="22000" {...register('strike_price')} />
+              <label className="block text-[11px] font-medium text-text-muted mb-1.5">Strike Price</label>
+              <input 
+                type="number" 
+                placeholder="22000" 
+                {...register('strike_price')} 
+                className="w-full py-2.5 px-3 bg-[#0a0a0f] border border-white/[0.07] rounded-lg text-white text-[13px] font-mono focus:border-[#4f8ef7]/50 focus:outline-none transition-colors"
+              />
             </div>
             <div>
-              <label>Expiry</label>
-              <select {...register('expiry_date')}>
+              <label className="block text-[11px] font-medium text-text-muted mb-1.5">Expiry</label>
+              <select 
+                {...register('expiry_date')}
+                className="w-full py-2.5 px-3 bg-[#0a0a0f] border border-white/[0.07] rounded-lg text-white text-[13px] focus:border-[#4f8ef7]/50 focus:outline-none transition-colors"
+              >
                 {expiries.map(d => <option key={d}>{d}</option>)}
               </select>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label>Entry price (₹)</label>
-            <input type="number" placeholder="150.50" step="0.05" {...register('entry_price')} />
-            {errors.entry_price && <span className="text-red text-[10px] mt-1 block">{errors.entry_price.message}</span>}
+            <label className="block text-[11px] font-medium text-text-muted mb-1.5">Entry Price</label>
+            <input 
+              type="number" 
+              placeholder="150.50" 
+              step="0.05" 
+              {...register('entry_price')} 
+              className="w-full py-2.5 px-3 bg-[#0a0a0f] border border-white/[0.07] rounded-lg text-white text-[13px] font-mono focus:border-[#4f8ef7]/50 focus:outline-none transition-colors"
+            />
+            {errors.entry_price && <span className="text-[#f7614f] text-[10px] mt-1 block">{errors.entry_price.message}</span>}
           </div>
           <div>
-            <label>
-              Quantity / Lots
+            <label className="block text-[11px] font-medium text-text-muted mb-1.5">
+              Quantity
               {instrument !== 'stock' && LOT_SIZES[symbol] && (
-                <span className="text-accent ml-1 text-[10px]">(lot={LOT_SIZES[symbol]})</span>
+                <span className="text-[#4f8ef7] ml-1 text-[10px]">(lot={LOT_SIZES[symbol]})</span>
               )}
             </label>
-            <input type="number" placeholder="50" min="1" {...register('quantity')} />
-            {errors.quantity && <span className="text-red text-[10px] mt-1 block">{errors.quantity.message}</span>}
+            <input 
+              type="number" 
+              placeholder="50" 
+              min="1" 
+              {...register('quantity')} 
+              className="w-full py-2.5 px-3 bg-[#0a0a0f] border border-white/[0.07] rounded-lg text-white text-[13px] font-mono focus:border-[#4f8ef7]/50 focus:outline-none transition-colors"
+            />
+            {errors.quantity && <span className="text-[#f7614f] text-[10px] mt-1 block">{errors.quantity.message}</span>}
             {instrument !== 'stock' && LOT_SIZES[symbol] && quantity % LOT_SIZES[symbol] !== 0 && (
-              <span className="text-amber text-[10px] mt-1 block">
-                ⚠ Qty must be a multiple of {LOT_SIZES[symbol]}
+              <span className="text-[#f7b84f] text-[10px] mt-1 block">
+                Qty must be multiple of {LOT_SIZES[symbol]}
               </span>
             )}
           </div>
         </div>
 
+        {/* Margin Preview */}
         {entryPrice && quantity ? (
-          <div className="bg-black/40 border border-white/5 rounded-lg py-2.5 px-3.5 text-xs mt-2 relative overflow-hidden">
-            <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent"></div>
+          <div className="bg-[#0a0a0f] border border-white/[0.07] rounded-lg py-3 px-4 relative overflow-hidden">
+            <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#4f8ef7]" />
             <div className="flex justify-between items-center pl-2">
-              <span className="text-text-muted font-medium uppercase tracking-wide text-[10px]">Margin required</span>
-              <span className="text-white font-mono font-bold">{INR(Number(entryPrice) * Number(quantity))}</span>
+              <span className="text-text-muted text-[10px] font-bold uppercase tracking-wider">Margin Required</span>
+              <span className="text-white font-mono font-bold text-[14px]">{INR(Number(entryPrice) * Number(quantity))}</span>
             </div>
           </div>
         ) : null}
 
-        <button type="submit" className="btn btn-primary justify-center p-2.5 mt-2" disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Place ${tradeType.toUpperCase()} order`}
+        <button 
+          type="submit" 
+          disabled={isSubmitting}
+          className={cn(
+            "w-full py-3 rounded-lg text-[14px] font-semibold transition-all duration-150 flex items-center justify-center gap-2",
+            tradeType === 'buy'
+              ? 'bg-[#34d48a] text-[#0a0a0f] hover:bg-[#3ee69a] shadow-[0_0_15px_rgba(52,212,138,0.25)]'
+              : 'bg-[#f7614f] text-white hover:bg-[#f87363] shadow-[0_0_15px_rgba(247,97,79,0.25)]'
+          )}
+        >
+          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : `Place ${tradeType.toUpperCase()} Order`}
         </button>
       </form>
     </div>

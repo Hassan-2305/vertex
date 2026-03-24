@@ -5,30 +5,30 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #060d13;
-  --bg-card: #0a141d;
-  --bg-elevated: #111a24;
-  --bg-body: #060d13;
+  --bg: #0a0a0f;
+  --bg-card: #111118;
+  --bg-elevated: #18181f;
+  --bg-body: #0a0a0f;
   --text: #ffffff;
   --text-muted: #7da5bf;
   --text-dim: #496c82;
-  --border: #142433;
-  --border-hover: #1e364d;
-  --accent: #38bdf8;          /* Bright cyan from the vertex logo dot */
-  --accent-dim: rgba(56, 189, 248, 0.1);
-  --accent-border: rgba(56, 189, 248, 0.25);
-  /* Vibrant status colors */
-  --green: #34d399;           /* Emerald */
-  --green-dim: rgba(52, 211, 153, 0.1);
-  --red: #ef4444;             /* Intense, darker red */
-  --red-dim: rgba(239, 68, 68, 0.15);
-  --amber: #fbbf24;
-  --amber-dim: rgba(251,191,36,0.1);
+  --border: rgba(255,255,255,0.07);
+  --border-hover: rgba(255,255,255,0.14);
+  --accent: #4f8ef7;          /* Blue accent from design spec */
+  --accent-dim: rgba(79, 142, 247, 0.08);
+  --accent-border: rgba(79, 142, 247, 0.25);
+  /* Status colors */
+  --green: #34d48a;
+  --green-dim: rgba(52, 212, 138, 0.1);
+  --red: #f7614f;
+  --red-dim: rgba(247, 97, 79, 0.15);
+  --amber: #f7b84f;
+  --amber-dim: rgba(247,184,79,0.1);
   --radius: 12px;
   --radius-sm: 8px;
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-  --font-head: 'Outfit', 'Inter', sans-serif;
+  --font-head: 'Syne', 'Inter', sans-serif;
   --font-body: 'DM Sans', sans-serif;
 }
 
@@ -78,25 +78,60 @@ body {
 @keyframes fadeIn { from { opacity: 0; filter: blur(4px); transform: translateY(8px); } to { opacity: 1; filter: blur(0); transform: translateY(0); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes float { 
+  0%, 100% { transform: translateY(0); } 
+  50% { transform: translateY(-8px); } 
+}
+@keyframes rotateGradient { 
+  0% { transform: rotate(0deg); } 
+  100% { transform: rotate(360deg); } 
+}
+@keyframes glow { 
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(79, 142, 247, 0.4)); } 
+  50% { filter: drop-shadow(0 0 20px rgba(79, 142, 247, 0.8)); } 
+}
+@keyframes particleRise {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-60px) scale(0); opacity: 0; }
+}
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+@keyframes blink {
+  0%, 100% { border-color: transparent; }
+  50% { border-color: var(--accent); }
+}
+@keyframes gridMove {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(20px); }
+}
+@keyframes candlestickFloat {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
 
 .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.float-animation { animation: float 3s ease-in-out infinite; }
+.glow-animation { animation: glow 2s ease-in-out infinite; }
+.rotate-gradient { animation: rotateGradient 4s linear infinite; }
 
 /* Glass Panel */
 .glass-panel {
   @apply relative border border-white/5 rounded-xl;
-  background: rgba(10, 20, 29, 0.65);
+  background: rgba(17, 17, 24, 0.65);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 
     inset 0 1px 1px rgba(255, 255, 255, 0.03),
-    inset 0 0 40px rgba(56, 189, 248, 0.02),
+    inset 0 0 40px rgba(79, 142, 247, 0.02),
     0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .glass-panel:hover {
   box-shadow: 
     inset 0 1px 1px rgba(255, 255, 255, 0.05),
-    inset 0 0 40px rgba(56, 189, 248, 0.04),
+    inset 0 0 40px rgba(79, 142, 247, 0.04),
     0 12px 40px rgba(0, 0, 0, 0.5);
   @apply border-white/10;
 }
@@ -132,7 +167,7 @@ body {
 .btn:hover { background: var(--bg-elevated); border-color: var(--border-hover); box-shadow: 0 0 12px rgba(255,255,255,0.03); }
 .btn:active { transform: scale(0.97); }
 .btn-primary {
-  @apply bg-accent text-bg font-bold shadow-[0_0_15px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] hover:-translate-y-[1px] border border-accent;
+  @apply bg-accent text-bg font-bold shadow-[0_0_15px_rgba(79,142,247,0.25)] hover:shadow-[0_0_25px_rgba(79,142,247,0.4)] hover:-translate-y-[1px] border border-accent;
 }
 .btn-danger { background: var(--red-dim); border-color: rgba(248,113,113,0.2); color: var(--red); }
 .btn-sm { padding: 5px 12px; font-size: 12px; }

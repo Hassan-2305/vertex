@@ -2,56 +2,48 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { FlaskConical } from 'lucide-react'
+import { FlaskConical, Send, Sparkles } from 'lucide-react'
 
 const PROMPTS = [
-  'Suggest a momentum strategy for Nifty 50 stocks',
-  'What is a good intraday strategy for Bank Nifty?',
-  'Explain a safe F&O strategy for beginners',
-  'Create a swing trading strategy using RSI and EMA',
+  { label: 'Momentum Strategy', text: 'Suggest a momentum strategy for Nifty 50 stocks' },
+  { label: 'Intraday Bank Nifty', text: 'What is a good intraday strategy for Bank Nifty?' },
+  { label: 'Safe F&O Strategy', text: 'Explain a safe F&O strategy for beginners' },
+  { label: 'Swing Trading', text: 'Create a swing trading strategy using RSI and EMA' },
 ]
 
-// Lightweight markdown renderer for AI responses
 function renderMarkdown(text) {
   const lines = text.split('\n')
   const elements = []
   let key = 0
 
   for (const line of lines) {
-    // Headings
     if (line.startsWith('### ')) {
-      elements.push(<div key={key++} style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginTop: 14, marginBottom: 4 }}>{inlineParse(line.slice(4))}</div>)
+      elements.push(<div key={key++} className="font-bold text-[14px] text-white mt-3.5 mb-1">{inlineParse(line.slice(4))}</div>)
     } else if (line.startsWith('## ')) {
-      elements.push(<div key={key++} style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginTop: 14, marginBottom: 4 }}>{inlineParse(line.slice(3))}</div>)
+      elements.push(<div key={key++} className="font-bold text-[15px] text-white mt-3.5 mb-1">{inlineParse(line.slice(3))}</div>)
     } else if (line.startsWith('# ')) {
-      elements.push(<div key={key++} style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)', marginTop: 16, marginBottom: 6 }}>{inlineParse(line.slice(2))}</div>)
-    // Bullet points
+      elements.push(<div key={key++} className="font-bold text-[16px] text-white mt-4 mb-1.5">{inlineParse(line.slice(2))}</div>)
     } else if (/^[\*\-] /.test(line)) {
-      elements.push(<div key={key++} style={{ paddingLeft: 16, marginBottom: 2, display: 'flex', gap: 6 }}><span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span><span>{inlineParse(line.slice(2))}</span></div>)
-    // Numbered list
+      elements.push(<div key={key++} className="pl-4 mb-0.5 flex gap-1.5"><span className="text-[#4f8ef7] shrink-0">&#8226;</span><span>{inlineParse(line.slice(2))}</span></div>)
     } else if (/^\d+\.\s/.test(line)) {
       const [num, ...rest] = line.split(/\.\s/)
-      elements.push(<div key={key++} style={{ paddingLeft: 16, marginBottom: 2, display: 'flex', gap: 6 }}><span style={{ color: 'var(--accent)', flexShrink: 0, fontWeight: 600 }}>{num}.</span><span>{inlineParse(rest.join('. '))}</span></div>)
-    // Horizontal rule
+      elements.push(<div key={key++} className="pl-4 mb-0.5 flex gap-1.5"><span className="text-[#4f8ef7] shrink-0 font-semibold">{num}.</span><span>{inlineParse(rest.join('. '))}</span></div>)
     } else if (line.trim() === '---') {
-      elements.push(<hr key={key++} style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '8px 0' }} />)
-    // Empty line → spacer
+      elements.push(<hr key={key++} className="border-t border-white/[0.07] my-2" />)
     } else if (line.trim() === '') {
-      elements.push(<div key={key++} style={{ height: 6 }} />)
-    // Regular paragraph
+      elements.push(<div key={key++} className="h-1.5" />)
     } else {
-      elements.push(<div key={key++} style={{ marginBottom: 2 }}>{inlineParse(line)}</div>)
+      elements.push(<div key={key++} className="mb-0.5">{inlineParse(line)}</div>)
     }
   }
   return elements
 }
 
 function inlineParse(text) {
-  // Split on **bold** and *italic* patterns
   const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g)
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} style={{ fontWeight: 700, color: 'var(--text)' }}>{part.slice(2, -2)}</strong>
+      return <strong key={i} className="font-bold text-white">{part.slice(2, -2)}</strong>
     } else if (part.startsWith('*') && part.endsWith('*')) {
       return <em key={i}>{part.slice(1, -1)}</em>
     }
@@ -59,10 +51,8 @@ function inlineParse(text) {
   })
 }
 
-// Detect the primary strategy type from an AI response
 function detectStrategy(text) {
   const t = text.toLowerCase()
-  // Order matters — check more specific ones first
   if (t.includes('supertrend')) return { id: 'supertrend', name: 'Supertrend' }
   if (t.includes('vwap')) return { id: 'vwap_dev', name: 'VWAP Deviation' }
   if (t.includes('bollinger') || t.includes('bb ') || t.includes('band')) return { id: 'bb_breakout', name: 'Bollinger Breakout' }
@@ -73,7 +63,6 @@ function detectStrategy(text) {
   return null
 }
 
-// Detect which NSE symbol might be mentioned in the AI response
 function detectSymbol(text) {
   const t = text.toUpperCase()
   const symbols = [
@@ -91,6 +80,18 @@ function detectSymbol(text) {
     if (keywords.some(k => t.includes(k))) return sym
   }
   return null
+}
+
+// Animated dot grid background
+function DotGrid() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-[0.03]">
+      <div className="absolute inset-0" style={{
+        backgroundImage: 'radial-gradient(circle, #4f8ef7 1px, transparent 1px)',
+        backgroundSize: '24px 24px',
+      }} />
+    </div>
+  )
 }
 
 export default function StrategyPage() {
@@ -117,8 +118,6 @@ export default function StrategyPage() {
       const history = messages.map(m => ({ role: m.role, content: m.content }))
       history.push({ role: 'user', content: msg })
 
-      // FIXED: Call our Supabase Edge Function instead of the Anthropic API directly.
-      // The API key lives securely in Supabase secrets, not in the browser.
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-ai`,
@@ -150,99 +149,156 @@ export default function StrategyPage() {
     } catch (e) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Error: ${e.message || 'Failed to connect to Strategy AI. Make sure the ANTHROPIC_API_KEY is set in your Supabase project secrets.'}`
+        content: `Error: ${e.message || 'Failed to connect to Strategy AI.'}`
       }])
     }
     setLoading(false)
   }
 
+  const showPrompts = messages.length === 1
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: '1.5rem', gap: '1rem', maxWidth: 800 }}>
-      <div>
-        <h1 style={s.pageTitle}>Strategy AI</h1>
-        <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>Powered by Llama 3.3 via Groq · Indian markets specialist</p>
+    <div className="h-full flex relative">
+      <DotGrid />
+      
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col p-6 relative z-10">
+        <div className="mb-4">
+          <h1 className="font-head text-[22px] font-semibold text-white tracking-tight">Strategy AI</h1>
+          <p className="text-text-muted text-[12px] mt-1">Powered by Llama 3.3 via Groq - Indian markets specialist</p>
+        </div>
+
+        {/* Prompt Suggestions (shown when empty) */}
+        {showPrompts && (
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {PROMPTS.map((p, i) => (
+              <button 
+                key={i} 
+                onClick={() => send(p.text)} 
+                className="p-4 bg-[#111118] border border-white/[0.07] rounded-xl text-left hover:border-white/[0.14] hover:bg-[#18181f] transition-all duration-150 group"
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Sparkles size={12} className="text-[#4f8ef7] opacity-60 group-hover:opacity-100 transition-opacity" />
+                  <span className="text-[12px] font-medium text-white">{p.label}</span>
+                </div>
+                <div className="text-[11px] text-text-muted leading-relaxed">{p.text}</div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+          {messages.map((m, i) => (
+            <div 
+              key={i} 
+              className={`max-w-[85%] ${m.role === 'user' ? 'ml-auto' : ''}`}
+            >
+              {m.role === 'assistant' ? (
+                <div className="bg-[#111118] border border-white/[0.07] rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#34d48a] animate-pulse" />
+                    <span className="text-[10px] font-medium text-text-muted">Vertex AI</span>
+                  </div>
+                  <div className="text-[13px] leading-relaxed text-text-muted">
+                    {renderMarkdown(m.content)}
+                  </div>
+                  
+                  {/* Backtest CTA */}
+                  {i > 0 && (() => {
+                    const strat = detectStrategy(m.content)
+                    if (!strat) return null
+                    const sym = detectSymbol(m.content)
+                    return (
+                      <div className="mt-3 pt-3 border-t border-white/[0.07]">
+                        <button
+                          onClick={() => {
+                            const params = new URLSearchParams({ strategy: strat.id })
+                            if (sym) params.set('symbol', sym)
+                            navigate(`/dashboard/backtest?${params.toString()}`)
+                          }}
+                          className="inline-flex items-center gap-2 px-3 py-2 bg-[rgba(79,142,247,0.08)] border border-[rgba(79,142,247,0.25)] rounded-lg text-[#4f8ef7] text-[12px] font-medium hover:bg-[rgba(79,142,247,0.12)] transition-colors"
+                        >
+                          <FlaskConical size={13} />
+                          Test "{strat.name}" on Backtest{sym ? ` - ${sym.replace('.NS', '')}` : ''}
+                        </button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              ) : (
+                <div className="bg-[#4f8ef7] rounded-xl rounded-br-sm p-4">
+                  <div className="text-[13px] leading-relaxed text-white">{m.content}</div>
+                </div>
+              )}
+            </div>
+          ))}
+          
+          {/* Typing Indicator */}
+          {loading && (
+            <div className="max-w-[85%]">
+              <div className="bg-[#111118] border border-white/[0.07] rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#34d48a] animate-pulse" />
+                  <span className="text-[10px] font-medium text-text-muted">Vertex AI</span>
+                </div>
+                <div className="flex items-center gap-1.5 py-1">
+                  {[0, 1, 2].map(i => (
+                    <div 
+                      key={i} 
+                      className="w-2 h-2 rounded-full bg-[#4f8ef7]"
+                      style={{ animation: 'pulse 1.2s ease-in-out infinite', animationDelay: `${i * 0.15}s` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input Area */}
+        <div className="mt-4 flex gap-2">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+            placeholder="Ask about trading strategies for Indian markets..."
+            disabled={loading}
+            className="flex-1 py-3 px-4 bg-[#111118] border border-white/[0.07] rounded-xl text-white text-[13px] placeholder:text-text-dim focus:border-[#4f8ef7]/50 focus:outline-none transition-colors"
+          />
+          <button 
+            className="px-4 bg-[#4f8ef7] rounded-xl text-white font-medium hover:bg-[#5d9af8] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(79,142,247,0.25)]"
+            onClick={() => send()} 
+            disabled={loading || !input.trim()}
+          >
+            <Send size={16} />
+          </button>
+        </div>
+        <div className="text-center text-[10px] text-text-dim mt-2">Press Enter to send</div>
       </div>
 
-      {messages.length === 1 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {PROMPTS.map((p, i) => (
-            <button key={i} onClick={() => send(p)} style={s.promptCard}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p}</span>
+      {/* Right Sidebar - Quick Prompts */}
+      <div className="w-[180px] shrink-0 bg-[#111118] border-l border-white/[0.07] p-4 hidden lg:block">
+        <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-3">Quick Prompts</div>
+        <div className="space-y-2">
+          {[
+            'Top 5 momentum stocks',
+            'Explain RSI indicator',
+            'Best time to trade F&O',
+            'Risk management tips',
+          ].map((prompt, i) => (
+            <button
+              key={i}
+              onClick={() => send(prompt)}
+              className="w-full p-2.5 text-left text-[11px] text-text-muted bg-[#0a0a0f] border border-white/[0.07] rounded-lg hover:border-white/[0.14] hover:text-white transition-all duration-150"
+            >
+              {prompt}
             </button>
           ))}
         </div>
-      )}
-
-      <div style={s.chatArea}>
-        {messages.map((m, i) => (
-          <div key={i} style={{ ...s.message, ...(m.role === 'user' ? s.userMsg : s.aiMsg) }}>
-            {m.role === 'assistant' && (
-              <div style={s.aiLabel}>
-                <div style={s.aiDot} />
-                Vertex AI
-              </div>
-            )}
-            <div style={{ fontSize: 13, lineHeight: 1.7, color: m.role === 'user' ? 'white' : 'var(--text)' }}>
-              {m.role === 'user' ? m.content : renderMarkdown(m.content)}
-            </div>
-            {m.role === 'assistant' && i > 0 && (() => {
-              const strat = detectStrategy(m.content)
-              if (!strat) return null
-              const sym = detectSymbol(m.content)
-              return (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-                  <button
-                    onClick={() => {
-                      const params = new URLSearchParams({ strategy: strat.id })
-                      if (sym) params.set('symbol', sym)
-                      navigate(`/backtest?${params.toString()}`)
-                    }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', borderRadius: 8, color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-                  >
-                    <FlaskConical size={13} />
-                    Test "{strat.name}" on Backtest{sym ? ` · ${sym.replace('.NS', '')}` : ''}
-                  </button>
-                </div>
-              )
-            })()}
-          </div>
-        ))}
-        {loading && (
-          <div style={{ ...s.message, ...s.aiMsg }}>
-            <div style={s.aiLabel}><div style={s.aiDot} />Vertex AI</div>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '4px 0' }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease infinite', animationDelay: `${i * 0.2}s` }} />
-              ))}
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      <div style={s.inputRow}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-          placeholder="Ask about trading strategies for Indian markets..."
-          style={{ flex: 1 }}
-          disabled={loading}
-        />
-        <button className="btn btn-primary" onClick={() => send()} disabled={loading || !input.trim()}>Send</button>
       </div>
     </div>
   )
-}
-
-const s = {
-  pageTitle: { fontFamily: 'var(--font-head)', fontSize: 22, fontWeight: 600, color: 'var(--text)' },
-  chatArea: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 },
-  message: { padding: '12px 14px', borderRadius: 10, maxWidth: '85%' },
-  aiMsg: { background: 'var(--bg-card)', border: '1px solid var(--border)', alignSelf: 'flex-start', width: '100%', maxWidth: '100%' },
-  userMsg: { background: 'var(--accent)', alignSelf: 'flex-end', borderRadius: '10px 10px 2px 10px' },
-  aiLabel: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 500 },
-  aiDot: { width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', animation: 'pulse 2s ease infinite' },
-  inputRow: { display: 'flex', gap: 8 },
-  promptCard: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s' },
 }
